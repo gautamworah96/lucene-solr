@@ -20,6 +20,7 @@ package org.apache.lucene.facet.taxonomy.directory;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.facet.taxonomy.FacetLabel;
 import org.apache.lucene.facet.taxonomy.TaxonomyReader;
+import org.apache.lucene.facet.taxonomy.TaxonomyWriter;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LogByteSizeMergePolicy;
@@ -27,6 +28,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.LuceneTestCase;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -61,11 +63,12 @@ public class TestBackwardsCompatibility extends LuceneTestCase {
     // Then move those 2 zip files to your trunk checkout and add them
     // to the oldNames array.
 
-    public void testCreateOldTaxonomy() throws IOException {
-        createTaxoIndex("taxo.cfs");
+    public void testCreateNewTaxonomy() throws IOException {
+        createNewTaxoIndex("taxo.cfs");
     }
 
-    private void createTaxoIndex(String dirName) throws IOException {
+    // Opens up a pre-existing old taxonomy index and adds new BinaryDocValues based new fields
+    private void createNewTaxoIndex(String dirName) throws IOException {
         Path indexDir = getIndexDir().resolve(dirName);
         Directory dir = newFSDirectory(indexDir);
 
@@ -83,18 +86,42 @@ public class TestBackwardsCompatibility extends LuceneTestCase {
 
         int  n = 10;
         for (int i=0; i<n; i++) {
-            writer.addCategory(new FacetLabel("b",Integer.toString(i)));
+            writer.addCategory(new FacetLabel("b", Integer.toString(i)));
         }
         iw.forceMerge(1);
+        iw.commit();
 
         for (int i=0; i<n; i++) {
             int ord1 = reader.getOrdinal(new FacetLabel("a", Integer.toString(i)));
             int ord2 = reader.getOrdinal(new FacetLabel("b", Integer.toString(i)));
-            assert ord1!=TaxonomyReader.INVALID_ORDINAL;
-            assert ord2!=TaxonomyReader.INVALID_ORDINAL;
+            assert ord1 != TaxonomyReader.INVALID_ORDINAL;
+            assert ord2 != TaxonomyReader.INVALID_ORDINAL;
         }
 
         reader.close();
+        writer.close();
+        dir.close();
+    }
+
+    public void testCreateOldTaxonomy() throws IOException {
+        createOldTaxoIndex("taxo.cfs");
+    }
+
+    // Used to create a fresh taxonomy index with StoredFields
+    private void createOldTaxoIndex(String dirName) throws IOException {
+        Path indexDir = getIndexDir().resolve(dirName);
+        Files.deleteIfExists(indexDir);
+        Directory dir = newFSDirectory(indexDir);
+
+        TaxonomyWriter writer = new DirectoryTaxonomyWriter(dir);
+
+        // prepare a few categories
+        int  n = 10;
+        for (int i=0; i<n; i++) {
+            writer.addCategory(new FacetLabel("a", Integer.toString(i)));
+        }
+
+        writer.commit();
         writer.close();
         dir.close();
     }
